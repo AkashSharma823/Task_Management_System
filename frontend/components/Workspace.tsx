@@ -1,0 +1,34 @@
+'use client';
+import { useEffect, useMemo, useState } from 'react';
+import { CalendarDays, ChevronDown, MoreHorizontal, Plus } from 'lucide-react';
+import { useApp } from './AppProvider';
+import { Sidebar } from './Sidebar';
+import { Topbar } from './Topbar';
+import { TaskCard } from './TaskCard';
+import { AddTaskModal } from './AddTaskModal';
+import { getTasks } from '../lib/api';
+import { Task } from '../lib/types';
+
+const fallback:Task[]=[
+{id:'demo-1',title:'Write API Documentation',description:'Create clear and detailed API documentation to guide developers using the inventory and sales metrics effectively.',status:'todo',priority:'high',dueDate:'2026-07-29',labels:'Deployment',team:'Development'},
+{id:'demo-2',title:'Implement Search Function',description:'',status:'todo',priority:'high',dueDate:'2026-07-29',labels:'Deployment',team:'Development'},
+{id:'demo-3',title:'Deploy to Production',description:'',status:'todo',priority:'high',dueDate:'2026-07-29',labels:'Deployment',team:'Development'},
+{id:'demo-4',title:'Code Review Completed',description:'',status:'doing',priority:'high',dueDate:'2026-07-29',labels:'Deployment',team:'Development'},
+{id:'demo-5',title:'Design Mockups Finalized',description:'',status:'doing',priority:'high',dueDate:'2026-07-29',labels:'Deployment',team:'Development'},
+{id:'demo-6',title:'Feature Testing Passed',description:'',status:'completed',priority:'medium',dueDate:'2026-07-30',labels:'Testing,Passed',team:'QA Team'},
+{id:'demo-7',title:'UI Design Updated',description:'',status:'completed',priority:'medium',dueDate:'2026-07-31',labels:'Design,Updated',team:'Designer'},
+{id:'demo-8',title:'Security Audit Scheduled',description:'',status:'completed',priority:'urgent',dueDate:'2026-08-01',labels:'Audit,Scheduled',team:'Security'},
+{id:'demo-9',title:'UI Review',description:'',status:'on-hold',priority:'medium',dueDate:'2026-08-04',labels:'Review',team:'Design'},
+{id:'demo-10',title:'Backend Integration',description:'',status:'on-hold',priority:'low',dueDate:'2026-08-06',labels:'Development',team:'Dev Team'},
+{id:'demo-11',title:'User Feedback',description:'',status:'on-hold',priority:'low',dueDate:'2026-08-10',labels:'Research',team:'Product'}];
+const columns:[string,Task['status']][]=[['To Do','todo'],['Doing','doing'],['Completed','completed'],['On Hold','on-hold']];
+const defaults=['Priority','Members','Due Date','Labels'];
+
+export function Workspace(){const {user,loading}=useApp();const [sidebar,setSidebar]=useState(false);const [view,setView]=useState<'board'|'list'>('board');const [tasks,setTasks]=useState<Task[]>(fallback);const [search,setSearch]=useState('');const [fields,setFields]=useState(false);const [filtersOpen,setFiltersOpen]=useState(false);const [fieldsState,setFieldsState]=useState(defaults);const [filter,setFilter]=useState<{field:string;value:string}|null>(null);const [add,setAdd]=useState(false);const [apiReady,setApiReady]=useState(false);
+ useEffect(()=>{if(user)getTasks().then(t=>{setTasks(t);setApiReady(true)}).catch(()=>setApiReady(false))},[user]);
+ const filtered=useMemo(()=>tasks.filter(t=>{const q=search.trim().toLowerCase();if(q&&!`${t.title} ${t.description} ${t.labels} ${t.team}`.toLowerCase().includes(q))return false;if(!filter)return true;switch(filter.field){case'Priority':return (t.priority==='none'?'No Priority':t.priority).toLowerCase()===filter.value.toLowerCase();case'Status':return ({'To Do':'todo','Doing':'doing','Completed':'completed','On Hold':'on-hold','Backlog':'backlog'} as any)[filter.value]===t.status;case'Teams':return t.team===filter.value;case'Labels':return t.labels.split(',').includes(filter.value);case'Members':return filter.value==='Unassigned'?!t.memberId:true;default:return true}}),[tasks,search,filter]);
+ if(loading)return <div className="min-h-screen flex items-center justify-center">Loading…</div>;if(!user)return null;
+ return <div className="app-shell flex"><Sidebar open={sidebar} onClose={()=>setSidebar(false)}/><div className="content flex-1 min-w-0"><Topbar onMenu={()=>setSidebar(true)} onAdd={()=>setAdd(true)} onSearch={setSearch} fieldsOpen={fields} onFields={()=>{setFields(v=>!v);setFiltersOpen(false)}} filtersOpen={filtersOpen} onFilter={()=>{setFiltersOpen(v=>!v);setFields(false)}} fieldsState={fieldsState} setFieldsState={setFieldsState} filter={filter} setFilter={setFilter} view={view} setView={setView}/><div className="workspace-wrap"><div className="workspace-heading"><div><h1 className="page-title">Tasks</h1><div className="text-[9px] muted mt-1">{apiReady?'Synced with NestJS API':'Demo data — changes require the backend to persist'}</div></div></div>
+ {view==='board'?<div className="board-scroll">{columns.map(([label,status])=><div className="task-column" key={status}><div className="column-head"><div><span className="muted mr-1">⋮</span>{label}</div><div className="flex items-center gap-2 muted"><span>{filtered.filter(t=>t.status===status).length}</span><button onClick={()=>setAdd(true)}><Plus size={13}/></button><MoreHorizontal size={13}/></div></div><div className="column-body">{filtered.filter(t=>t.status===status).map(t=><TaskCard task={t} key={t.id}/>)}<button className="add-inline" onClick={()=>setAdd(true)}>+ Add Task</button></div></div>)}</div>:<ListView tasks={filtered} fields={fieldsState} onAdd={()=>setAdd(true)}/>}</div></div>{add&&<AddTaskModal onClose={()=>setAdd(false)} onCreated={t=>setTasks(prev=>[...prev,t])}/>}</div>}
+
+function ListView({tasks,fields,onAdd}:{tasks:Task[];fields:string[];onAdd:()=>void}){const statuses:Task['status'][]=['todo','doing','completed','on-hold'];const labels={todo:'To Do',doing:'Doing',completed:'Completed','on-hold':'On Hold'};return <div className="list-sections">{statuses.map(s=>{const items=tasks.filter(t=>t.status===s);return <section key={s}><button className="section-title"><ChevronDown size={12}/>{labels[s]}</button><div className="table-card"><div className="table-row table-head"><span>Task</span>{fields.includes('Priority')&&<span>Priority</span>}{fields.includes('Members')&&<span>Members</span>}{fields.includes('Due Date')&&<span>Due Date</span>}{fields.includes('Labels')&&<span>Labels</span>}<span>Actions</span></div>{items.map(t=><div className="table-row" key={t.id}><a href={`/tasks/${t.id}`} className="hover:underline">{t.title}</a>{fields.includes('Priority')&&<span className={`priority p-${t.priority}`}>▴ {t.priority}</span>}{fields.includes('Members')&&<span>{t.memberId?'🌈':'+'}</span>}{fields.includes('Due Date')&&<span>{t.dueDate?<><CalendarDays size={10} className="inline mr-1"/>{new Date(t.dueDate).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</>:'—'}</span>}{fields.includes('Labels')&&<span className="truncate">{t.labels.split(',')[0]||'—'}</span>}<MoreHorizontal size={13} className="muted"/></div>)}<button onClick={onAdd} className="add-inline list-add">+ Add Task</button></div></section>})}</div>}
